@@ -1,0 +1,699 @@
+<!doctype html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="css/reset.css">
+	<link rel="stylesheet" href="css/common.css">
+	<link rel="stylesheet" href="css/style.css">
+	<link rel="stylesheet" type="text/css" href="css/loading1.css" />
+	<title>幻影无卡</title>
+</head>
+
+<body>
+	<script src="script/jquery-1.9.1.min.js"></script>
+	<script src="script/echarts.min.js"></script>
+	<script src="script/api.js?102123"></script>
+	<script src="script/H.js"></script>
+	<script src="script/db.js"></script>
+	<script src="script/mam.js"></script>
+	<script src="script/chackLogin.js"></script>
+	<script src="script/doT.min.js"></script>
+	<script src="script/jquery.color.min.js"></script>
+	<script src="script/jquery.animateNumber.js"></script>
+	<script type="text/javascript" src="script/loading1.js"></script>
+	<script src="http://ttsplus.xylrcs.cn/Public/js/response.js"></script>
+	<canvas id="canvas"></canvas>
+	<!-- 自定义区域 开始 -->
+	<section class="dataContainer">
+		<!-- left -->
+		<div class="dataLeftMain">
+			<div class="dataLeftLogo">
+				<div><img id="logoImg" src="image/logoImg.png" alt="logo"></div>
+			</div>
+			<div class="dataLeftProductList">
+
+			</div>
+			<div class="copyRight">
+				<p>技术支持：懒人科技</p>
+				<p>0471-3484526</p>
+				<div>
+					<a href="javascript:;" onclick="outLogin()">退出登录</a>
+				</div>
+			</div>
+		</div>
+		<!-- right -->
+		<div class="dataRightMain">
+			<div class="dataRightHeaderBox ren-flex-sb">
+				<h3 id="title"></h3>
+				<div id="todayWeek"></div>
+			</div>
+			<div class="dataRightBodyBox">
+				<div class="dataRightBodyTop ren-flex-sb">
+					<div class="dataRightItem" style="background-image:url(image/dataBgImg01.png)">
+						<h3>当月交易(万元)</h3>
+						<h4 class="ren-flex-ac" id="monthTradingNum">0.00</h4>
+						<div class="ren-flex-sb" id="monthTradingBox">
+							<span class="ren-flex">上月增长：0.00<img src="image/arrTopImg.png"></span>
+							<span class="ren-flex">环比增长：0.00%<img src="image/arrTopImg.png"></span>
+						</div>
+					</div>
+					<div class="dataRightItem" style="background-image:url(image/dataBgImg02.png)">
+						<h3>当月激活(台)</h3>
+						<h4 id="monthActiveNum">0</h4>
+						<div class="ren-flex-sb" id="monthActiveBox">
+							<span class="ren-flex">上月增长：0.00<img src="image/arrTopImg.png"></span>
+							<span class="ren-flex">环比增长：0.00%<img src="image/arrTopImg.png"></span>
+						</div>
+					</div>
+					<div class="dataRightItem" style="background-image:url(image/dataBgImg03.png)">
+						<h3>当月收益(元)</h3>
+						<h4 id="monthIncomeNum">0.00</h4>
+						<div class="ren-flex-sb" id="monthIncomeBox">
+							<span class="ren-flex">0.00<img src="image/arrTopImg.png"></span>
+							<span class="ren-flex">环比增长：0.00%<img src="image/arrTopImg.png"></span>
+						</div>
+					</div>
+				</div>
+				<div class="dataRightBodySub ren-flex-sb">
+					<div class="dataRightBodySubItem">
+						<h3>最近<span class="tradeDay"></span>日交易(万元)</h3>
+						<div id="myChartLine" style="width:100%; height:43vh"></div>
+					</div>
+					<div class="dataRightBodySubItem">
+						<h3>最近<span class="tradeDay"></span>日激活(台)</h3>
+						<div id="myChartColumn" style="width:100%; height:43vh"></div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+	<!-- 自定义区域 结束 -->
+	<script>
+		var data;
+		var productID = "";
+		var lineDayData = [];
+		var lineMoneyData = [];
+		var columnDayData = [];
+		var columnMoneyData = [];
+		var currentNum = 0;
+		var timer = null;
+		H.ready(function () {
+			//定时清缓存
+			setInterval(function () {
+				api.clearCache(function () {
+					// H.toast('缓存已清除');
+				});
+			}, 600000);
+			// 定时请求数据
+			getIndexData();
+			H.dblclickToCloseApp();
+
+			// websocket
+			// var wsUrl = 'ws://localhost:8080/ScadaWebSocket/ScadaSocket/'
+			// var ws = new WebSocket(wsUrl);
+			// ws.onopen = function (evt) {
+			// 	console.log("Connection open ...");
+			// 	ws.send("Hello WebSockets!");
+			// };
+
+			// ws.onmessage = function (evt) {
+			// 	console.log("Received Message: " + evt.data);
+			// 	// ws.close();
+			// };
+
+			// ws.onclose = function (evt) {
+			// 	console.log("Connection closed.");
+			// };
+			//年月日星期几
+			setInterval(clock, 1000);
+			//产品绑定事件
+
+			$('.dataLeftProductList').on('click', 'a', function () {
+				$(this).addClass('active').siblings().removeClass('active');
+				productID = $(this).attr('data-id');
+				var $pid = data.uid;
+				getMonthTradingData($pid, productID);
+				getMonthActiveData($pid, productID);
+				getMonthIncomeData($pid, productID);
+				getTradelineData($pid, productID);
+				getActivelineData($pid, productID);
+			})
+		})
+
+		function clock() {
+			var week = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+			var localToday = '';
+			var d = new Date();
+			var localToday = d.getFullYear() + "年" + (d.getMonth() + 1) + "月" + d.getDate() + "日";
+			//三元运算符
+			var h = d.getHours() < 10 ? "0" + d.getHours() : d.getHours();
+			var min = d.getMinutes() < 10 ? "0" + d.getMinutes() : d.getMinutes();
+			var s = d.getSeconds() < 10 ? "0" + d.getSeconds() : d.getSeconds();
+			document.getElementById('todayWeek').innerHTML = localToday + "&nbsp;" + week[d.getDay()] +
+				"&nbsp;" + h + ":" + min + ":" + s;
+		}
+		// 请求数据
+		function getIndexData() {
+			data = getLogin();
+			var $pid = data.uid;
+			if (!$pid) {
+				H.toast('请先登录');
+				setTimeout(function () {
+					H.openWin('login', 'html/login/login.html')
+				}, 1000)
+			} else {
+				//请求产品分类
+				getInfo($pid);
+			}
+		}
+		// 退出登录
+		function outLogin() {
+			var dialogBox = api.require('dialogBox');
+			dialogBox.alert({
+				texts: {
+					title: '温馨提示',
+					content: '确定要退出登陆吗？',
+					leftBtnTitle: '取消',
+					rightBtnTitle: '确认'
+				},
+				styles: {
+					bg: '#fff',
+					w: 300,
+					title: {
+						marginT: 20,
+						// icon: 'widget://res/gou.png',
+						iconSize: 40,
+						titleSize: 14,
+						titleColor: '#000'
+					},
+					content: {
+						color: '#000',
+						size: 14
+					},
+					left: {
+						marginB: 7,
+						marginL: 20,
+						w: 130,
+						h: 35,
+						corner: 2,
+						bg: '#eee',
+						size: 14,
+						color: '#000'
+					},
+					right: {
+						marginB: 7,
+						marginL: 10,
+						w: 130,
+						h: 35,
+						corner: 2,
+						bg: '#eee',
+						size: 14,
+						color: '#000'
+					}
+				}
+			}, function (ret) {
+				if (ret.eventType == 'right') {
+					exitLogin()
+					setTimeout(function () {
+						// H.closeWin();
+						H.openWin('login', 'html/login/login.html');
+					}, 1000);
+					H.toast('退出成功');
+				}
+				dialogBox.close({
+					dialogName: 'alert'
+				});
+			});
+		}
+		// 折线图
+		function drawLine(selecter, monthData, moneyData) {
+			var $selecter = document.getElementById(selecter);
+			var $myChart = echarts.init($selecter);
+			// 绘制图表
+			var option = {
+				tooltip: {},
+				xAxis: {
+					type: "category",
+					data: monthData,
+					axisLabel: {
+						show: true,
+						textStyle: {
+							color: "#fff",
+							fontSize: 12
+						}
+					},
+					axisLine: {
+						lineStyle: {
+							color: "#fff",
+							width: 3
+						}
+					}
+				},
+				yAxis: {
+					type: "value",
+					axisLabel: {
+						show: true,
+						textStyle: {
+							color: "#fff",
+							fontSize: 12
+						}
+					},
+					axisLine: {
+						lineStyle: {
+							color: "#fff",
+							width: 3
+						}
+					},
+					splitLine: {
+						lineStyle: {
+							type: "dashed",
+							color: "#fff"
+						}
+					}
+				},
+				series: [{
+					data: moneyData,
+					type: "line",
+					itemStyle: {
+						normal: {
+							label: {
+								show: true,
+								fontSize: 12
+							},
+							color: "#fff",
+							lineStyle: {
+								width: 3,
+								color: "#23acfc"
+							}
+						}
+					},
+					areaStyle: {
+						normal: {
+							color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+									offset: 0.3,
+									color: "#23acfc"
+								},
+								{
+									offset: 1,
+									color: "#365993"
+								}
+							])
+						}
+					}, //填充区域样式
+				}],
+				grid: {
+					top: '13%', // 等价于 y: '16%'
+					left: '13%',
+					right: '9%',
+					bottom: '18%'
+				}
+			}
+			//使用刚指定的配置项和数据显示图表。
+			$myChart.setOption(option);
+		}
+
+		function drawColumn(selecter, monthData, moneyData) {
+			var $selecter = document.getElementById(selecter);
+			var $myChart = echarts.init($selecter);
+			// 绘制图表
+			var option = {
+				tooltip: {},
+				xAxis: {
+					type: "category",
+					data: monthData,
+					axisLabel: {
+						show: true,
+						textStyle: {
+							color: "#fff",
+							fontSize: 12
+						}
+					},
+					axisLine: {
+						lineStyle: {
+							color: "#fff",
+							width: 3
+						}
+					}
+				},
+				yAxis: {
+					type: "value",
+					axisLabel: {
+						show: true,
+						textStyle: {
+							color: "#fff",
+							fontSize: 12
+						}
+					},
+					axisLine: {
+						lineStyle: {
+							color: "#fff",
+							width: 3
+						}
+					},
+					splitLine: {
+						lineStyle: {
+							type: "dashed",
+							color: "#fff"
+						},
+					}
+				},
+				series: [{
+					data: moneyData,
+					type: "bar",
+					itemStyle: {
+						normal: {
+							color: new echarts.graphic.LinearGradient(
+								0, 0, 0, 1,
+								[{
+										offset: 0,
+										color: '#7e18fd'
+									},
+									{
+										offset: 1,
+										color: '#ae75fd'
+									}
+								]
+							),
+							label: {
+								show: true,
+								position: 'top',
+								textStyle: { //数值样式
+									color: '#fff',
+									fontSize: 12
+								}
+							}
+						}
+					}
+				}],
+				grid: {
+					top: '13%', // 等价于 y: '16%'
+					left: '13%',
+					right: '9%',
+					bottom: '18%'
+				}
+			}
+			//使用刚指定的配置项和数据显示图表。
+			$myChart.setOption(option);
+		}
+		//遥控器
+		// var tvcontrol = api.require('tvcontrol');
+		// tvcontrol.open({
+		// coverBack: false,
+		// coverHome: false,
+		// canClick: false,
+		// coverOtherDefault: true
+		// }, function (ret, err) {
+		// if (ret.keyCode == 19) { //向上键
+		// // keyUp();
+		// alert(JSON.stringify(res));
+		// } else if (ret.keyCode == 20) { //向下键
+		// // keyDown();
+		// alert(JSON.stringify(res));
+		// } else if (ret.keyCode == 23) {
+		// // keyEnter();
+		// alert(JSON.stringify(res));
+		// }
+		// });
+		//请求产品分类、logo、公司名称
+		function getInfo(pid) {
+			//显示loading
+			// showLoading();
+			H.ajax(getInfoCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "info",
+					platformID: pid
+				}
+			}, 'json', {});
+		}
+
+		function getInfoCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					// hideLoading();
+					var datas = ret.body;
+					$('#title').text(datas.name + '实时数据统计');
+					$('#logoImg').attr('src', datas.logo);
+					var interText = doT.template($("#porListBox").text());
+					$(".dataLeftProductList").html(interText(datas.productlist));
+					if (!productID) {
+						$('.dataLeftProductList a:first-of-type').addClass('active');
+					} else {
+						var selectedPro = $('.dataLeftProductList a[data-id="' + productID + '"]')
+						if (selectedPro.length) {
+							selectedPro.addClass('active').siblings().removeClass('active');
+						} else {
+							$('.dataLeftProductList a:first-of-type').addClass('active');
+						}
+					}
+					$('.dataLeftProductList a.active').trigger('click');
+					if (!datas.interval) {
+						datas.interval == 30000;
+					}
+					timer = setTimeout(getIndexData, datas.interval);
+
+				} else {
+					if (ret.statusCode == 0) {
+						clearTimeout(timer);
+						alert('网络连接错误，请重新登录！')
+						exitLogin()
+						H.openWin('login', 'html/login/login.html');
+
+					} else {
+						H.toast(response[ret.body.responseStatus]);
+					}
+				}
+			} else {
+
+			}
+		}
+		// 请求当月交易
+		function getMonthTradingData(pid, porid) {
+			H.ajax(getMonthTradingsDataCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "trade",
+					platformID: pid,
+					productID: porid
+				}
+			}, 'json', {});
+		}
+
+		function getMonthTradingsDataCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					var datas = ret.body.data;
+					if (parseFloat(datas.inc) < 0) {
+						datas.status = false;
+						datas.inc = Math.abs(parseFloat(datas.inc));
+						datas.pecent = Math.abs(parseFloat(datas.pecent));
+					} else {
+						datas.status = true;
+					}
+					dynNum('monthTradingNum', datas.cur, 2, true);
+					var interText = doT.template($("#monthTradingInfo").text());
+					$("#monthTradingBox").html(interText(datas));
+				}
+			}
+		}
+		// 请求当月激活
+		function getMonthActiveData(pid, porid) {
+			H.ajax(getMonthActiveDataCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "active",
+					platformID: pid,
+					productID: porid
+				}
+			}, 'json', {});
+		}
+
+		function getMonthActiveDataCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					var datas = ret.body.data;
+					if (parseFloat(datas.inc) < 0) {
+						datas.status = false;
+						datas.inc = Math.abs(parseFloat(datas.inc));
+						datas.pecent = Math.abs(parseFloat(datas.pecent));
+					} else {
+						datas.status = true;
+					}
+					dynNum('monthActiveNum', datas.cur, 0, false);
+					var interText = doT.template($("#monthActiveInfo").text());
+					$("#monthActiveBox").html(interText(datas));
+				}
+			}
+		}
+		// 请求当月收益
+		function getMonthIncomeData(pid, porid) {
+			H.ajax(getMonthIncomeDataCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "income",
+					platformID: pid,
+					productID: porid
+				}
+			}, 'json', {});
+		}
+
+		function getMonthIncomeDataCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					var datas = ret.body.data;
+					if (parseFloat(datas.inc) < 0) {
+						datas.status = false;
+						datas.inc = Math.abs(parseFloat(datas.inc));
+						datas.pecent = Math.abs(parseFloat(datas.pecent));
+					} else {
+						datas.status = true;
+					}
+					dynNum('monthIncomeNum', datas.cur, 2, true);
+					var interText = doT.template($("#monthIncomeInfo").text());
+					$("#monthIncomeBox").html(interText(datas));
+				}
+			}
+		}
+		// 动态数字
+		function dynNum(seleter, curDatas, decimal_places, sound) {
+			var decimal_factor = decimal_places === 0 ? 1 : Math.pow(10, decimal_places);
+			var min = $('#' + seleter).attr('data-' + productID);
+			min = min ? Number(min) : 0;
+			// 音效
+			if (sound) {
+				var soundPlayer = api.require('soundPlayer');
+				if (min != curDatas) {
+					soundPlayer.play({
+						paths: [{
+							path: 'widget://music/2.wav',
+							leftVolume: 1,
+							rightVolume: 1,
+							priority: 1,
+							loop: 0
+						}]
+					})
+				}
+			}
+			setTimeout(function () {
+				$('#' + seleter).prop('number', min * decimal_factor).animateNumber({
+					number: curDatas * decimal_factor,
+					numberStep: function (now, tween) {
+						var floored_number = Math.floor(now) / decimal_factor,
+							target = $(tween.elem);
+
+						if (decimal_places > 0) {
+							// force decimal places even if they are 0
+							floored_number = floored_number.toFixed(decimal_places);
+							// replace '.' separator with ','
+							floored_number = floored_number.toString().replace('.', '.');
+						}
+
+						target.text(floored_number);
+					}
+				}, 1000);
+			},700)
+
+			$('#' + seleter).attr('data-' + productID, curDatas);
+		}
+		//最近七日交易折线图
+		function getTradelineData(pid, porid) {
+			H.ajax(getTradelineDataCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "tradeline",
+					platformID: pid,
+					productID: porid
+				}
+			}, 'json', {});
+		}
+
+		function getTradelineDataCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					var datas = ret.body.data;
+					lineDayData = datas.dates;
+					lineMoneyData = datas.sums;
+					switch (datas.dates.length) {
+						case 5:
+							$('.tradeDay').text('五')
+							break;
+						case 6:
+							$('.tradeDay').text('六')
+							break;
+						case 7:
+							$('.tradeDay').text('七')
+							break;
+						default:
+							$('.tradeDay').text('七')
+					}
+					drawLine("myChartLine", lineDayData, lineMoneyData);
+				} else {
+					// H.toast(response[ret.body.responseStatus]);
+				}
+			}
+		}
+		//最近七日激活柱状图
+		function getActivelineData(pid, porid) {
+			H.ajax(getActivelineDataCallback, url, 'post', {
+				values: {
+					requestType: "tvdata",
+					requestKeywords: "activeline",
+					platformID: pid,
+					productID: porid
+				}
+			}, 'json', {});
+		}
+
+		function getActivelineDataCallback(ret, err) {
+			if (ret.body) {
+				if (ret.body.responseStatus === 1) {
+					var datas = ret.body.data;
+					columnDayData = datas.dates;
+					columnMoneyData = datas.sums;
+					drawColumn("myChartColumn", columnDayData, columnMoneyData);
+				} else {
+					// H.toast(response[ret.body.responseStatus]);
+				}
+			}
+		}
+	</script>
+</body>
+<!-- 产品分类 -->
+<script id="porListBox" type="text/x-dot-template">
+	{{ for(var index in it){ }}
+		<a href="javascript:;" data-id = "{{=it[index].id}}">{{=it[index].name}}</a>
+	{{ } }}
+</script>
+<!-- 当月交易 -->
+<script id="monthTradingInfo" type="text/x-dot-template">
+	{{? !it.status }}
+			<span class="ren-flex">上月下跌：{{=it.inc}}<img src="image/arrBottomImg.png"></span>
+			<span class="ren-flex">环比下跌：{{=it.pecent}}%<img src="image/arrBottomImg.png"></span>
+		{{??}}
+			<span class="ren-flex">上月增长：{{=it.inc}}<img src="image/arrTopImg.png"></span>
+			<span class="ren-flex">环比增长：{{=it.pecent}}%<img src="image/arrTopImg.png"></span>
+		{{?}}
+</script>
+<!-- 当月激活 -->
+<script id="monthActiveInfo" type="text/x-dot-template">
+	{{? !it.status }}
+			<span class="ren-flex">上月下跌：{{=it.inc}}<img src="image/arrBottomImg.png"></span>
+			<span class="ren-flex">环比下跌：{{=it.pecent}}%<img src="image/arrBottomImg.png"></span>
+		{{??}}
+			<span class="ren-flex">上月增长：{{=it.inc}}<img src="image/arrTopImg.png"></span>
+			<span class="ren-flex">环比增长：{{=it.pecent}}%<img src="image/arrTopImg.png"></span>
+		{{?}}
+</script>
+<!-- 当月收益 -->
+<script id="monthIncomeInfo" type="text/x-dot-template">
+	{{? !it.status }}
+			<span class="ren-flex">上月下跌：{{=it.inc}}<img src="image/arrBottomImg.png"></span>
+			<span class="ren-flex">环比下跌：{{=it.pecent}}%<img src="image/arrBottomImg.png"></span>
+		{{??}}
+			<span class="ren-flex">上月增长：{{=it.inc}}<img src="image/arrTopImg.png"></span>
+			<span class="ren-flex">环比增长：{{=it.pecent}}%<img src="image/arrTopImg.png"></span>
+		{{?}}
+</script>
+
+</html>
